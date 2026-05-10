@@ -8,54 +8,101 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.atividadektor.ui.PostViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import com.example.atividadektor.data.Post
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun App() {
     MaterialTheme {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            val viewModel: PostViewModel = viewModel { PostViewModel() }
-            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-            
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                var userIdInput by remember { mutableStateOf("") }
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Ktor Posts KMP") },
+                    actions = {
+                        val viewModel: PostViewModel = viewModel { PostViewModel() }
+                        TextButton(onClick = { viewModel.refresh() }) {
+                            Text("Atualizar", color = Color.White)
+                        }
+                    }
+                )
+            }
+        ) { padding ->
+            Surface(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                val viewModel: PostViewModel = viewModel { PostViewModel() }
+                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
                 
-                TextField(
-                    value = userIdInput,
-                    onValueChange = { 
-                        userIdInput = it
-                        viewModel.onUserIdChanged(it)
-                    },
-                    label = { Text("Filter by User ID") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                    singleLine = true
-                )
+                Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                    var userIdInput by remember { mutableStateOf("") }
+                    
+                    TextField(
+                        value = userIdInput,
+                        onValueChange = { 
+                            userIdInput = it
+                            viewModel.onUserIdChanged(it)
+                        },
+                        label = { Text("Filtrar por User ID") },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        singleLine = true,
+                        placeholder = { Text("Ex: 1") }
+                    )
 
-                PostList(
-                    posts = uiState.posts,
-                    isLoading = uiState.isLoading,
-                    error = uiState.error,
-                    onLoadMore = { viewModel.loadNextPage() }
-                )
+                    if (uiState.posts.isEmpty() && uiState.isLoading && !uiState.isRefreshing) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    } else if (uiState.posts.isEmpty() && uiState.error != null) {
+                        ErrorView(message = uiState.error!!, onRetry = { viewModel.retry() })
+                    } else {
+                        PostList(
+                            posts = uiState.posts,
+                            isLoading = uiState.isLoading,
+                            error = uiState.error,
+                            onLoadMore = { viewModel.loadNextPage() },
+                            onRetry = { viewModel.retry() }
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
+fun ErrorView(message: String, onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = message,
+            color = MaterialTheme.colorScheme.error,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = onRetry) {
+            Text("Tentar Novamente")
+        }
+    }
+}
+
+@Composable
 fun PostList(
-    posts: List<com.example.atividadektor.data.Post>,
+    posts: List<Post>,
     isLoading: Boolean,
     error: String?,
-    onLoadMore: () -> Unit
+    onLoadMore: () -> Unit,
+    onRetry: () -> Unit
 ) {
     val listState = rememberLazyListState()
 
@@ -67,26 +114,26 @@ fun PostList(
     }
 
     LaunchedEffect(shouldLoadMore.value) {
-        if (shouldLoadMore.value && !isLoading) {
+        if (shouldLoadMore.value && !isLoading && error == null) {
             onLoadMore()
         }
     }
 
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-        items(posts) { post ->
+        items(posts, key = { it.id }) { post ->
             Card(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(text = post.title, style = MaterialTheme.typography.titleMedium)
+                    Text(text = post.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = post.body, style = MaterialTheme.typography.bodySmall)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "User ID: ${post.userId}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary
+                    Text(text = post.body, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("User ID: ${post.userId}") },
+                        colors = AssistChipDefaults.assistChipColors(labelColor = MaterialTheme.colorScheme.secondary)
                     )
                 }
             }
@@ -98,18 +145,22 @@ fun PostList(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
                 }
             }
         }
 
         if (error != null) {
             item {
-                Text(
-                    text = "Error: $error",
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(16.dp)
-                )
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(text = error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = onRetry, modifier = Modifier.padding(top = 8.dp)) {
+                        Text("Tentar Novamente", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             }
         }
     }
