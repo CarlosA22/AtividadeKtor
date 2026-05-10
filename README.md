@@ -1,1 +1,1 @@
-Alunos: Carlos Serena, Arthur Magni
+Aluno: Carlos Serena
